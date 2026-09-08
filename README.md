@@ -1,5 +1,31 @@
 # AgentGuard
 
+Hooks are not a TCB: kernel policy for coding agents.
+
+**Author:** Pramath Shukla ([@shuklapramath](https://github.com/shuklapramath))  
+**Code:** [AgentGuard](https://github.com/AgentGuard-hq/AgentGuard) (Apache-2.0, v0.1.2, Linux)  
+**Status:** personal research / prototype, not a drop-in Seatbelt replacement
+
+## The problem
+
+Coding agents are not chatbots. Claude Code, Codex, and the rest `openat`, `execve`, and `connect`. The failure mode that matters is the *next syscall*, not the next token.
+
+Most “guardrails” sit in the agent: system prompts, `PreToolUse` hooks, `CLAUDE.md`. Those run in userspace, in a process the model can still drive. If the agent reaches `python -c`, `perl`, `node`, a raw loader, or any path that never hits the tool schema, the hook never ran. The OS still will — if you asked it to.
+
+Vendor sandboxes (Seatbelt, bubblewrap, Claude’s sandbox runtime, devcontainers) are the right *product* layer for most people. This note is about a narrower claim: **policy that is true even when the agent’s own conscience is false.**
+
+## What I built
+
+AgentGuard loads an eBPF LSM program, then starts the agent as the invoking user (not root). Deny is `EPERM`. Policy is YAML in the repo (`policies/default.yaml`): credential paths, destructive argv, egress allowlist via a local proxy.
+
+After a deny, optional Claude/Codex hooks inject a `feedback:` string so the model can adapt. If hooks are missing, the kernel still blocks. That split is the design: **enforcement is LSM; explanation is a courtesy.**
+
+```text
+policy.yaml  →  bpf LSM  →  openat/exec/connect
+                    ↓ deny
+                 EPERM     (+ optional feedback in the TUI)
+```
+
 License: [Apache-2.0](LICENSE)
 
 **MacOS (first time)**
